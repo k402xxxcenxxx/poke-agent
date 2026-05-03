@@ -29,6 +29,9 @@ jobs:
           - agent: gemini
             base_image: docker/sandbox-templates:gemini-docker
             cmd: gemini
+          - agent: codex
+            base_image: docker/sandbox-templates:codex
+            cmd: codex
           - agent: shell
             base_image: docker/sandbox-templates:shell-docker
             cmd: /bin/bash
