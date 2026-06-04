@@ -11,11 +11,30 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - agent: opencode
+            base_image: docker/sandbox-templates:opencode-docker
+            cmd: opencode
+          - agent: claude
+            base_image: docker/sandbox-templates:claude-code
+            cmd: claude
+          - agent: gemini
+            base_image: docker/sandbox-templates:gemini-docker
+            cmd: gemini
+          - agent: codex
+            base_image: docker/sandbox-templates:codex
+            cmd: codex
+          - agent: shell
+            base_image: docker/sandbox-templates:shell-docker
+            cmd: /bin/bash
 
     steps:
       - name: Checkout
@@ -25,7 +44,11 @@ jobs:
         id: version
         shell: bash
         run: |
-          TAG_NAME="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            TAG_NAME="${GITHUB_REF_NAME}"
+          else
+            TAG_NAME="v0.0.0-$(date +'%Y%m%d%H%M%S')"
+          fi
           VERSION="${TAG_NAME#v}"
           echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
@@ -36,7 +59,7 @@ jobs:
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -44,7 +67,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.agent }}
           tags: |
             type=semver,pattern={{version}},value=${{ steps.version.outputs.tag_name }}
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.tag_name }}
@@ -58,6 +81,24 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BASE_IMAGE=${{ matrix.base_image }}
+            AGENT_CMD=${{ matrix.cmd }}
+
+  create-release:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        shell: bash
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME}"
+          echo "tag_name=${TAG_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

@@ -1,4 +1,5 @@
-FROM docker/sandbox-templates:opencode-docker
+ARG BASE_IMAGE=docker/sandbox-templates:opencode-docker
+FROM ${BASE_IMAGE}
 
 COPY init_animation /init_animation
 COPY entrypoint.sh /entrypoint.sh
@@ -8,4 +9,7 @@ RUN chmod +x /entrypoint.sh
 
 USER agent
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["opencode"]
+
+ARG AGENT_CMD=opencode
+ENV AGENT_CMD=${AGENT_CMD}
+CMD ["sh", "-c", "${AGENT_CMD}"]
